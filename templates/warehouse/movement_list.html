@@ -1,0 +1,33 @@
+{% extends 'base/base.html' %}
+{% block title %}Zaxira harakatlari — WMS Pro{% endblock %}
+{% block page_title %}Zaxira harakatlari{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex items-center justify-between mb-5">
+    <form class="flex gap-2" method="get">
+      <select name="type" class="form-select w-36"><option value="">Barcha turlar</option>{% for val, label in type_choices %}<option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <button type="submit" class="btn-primary">Filtr</button>
+    </form>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b"><tr><th class="table-head">Vaqt</th><th class="table-head">Tur</th><th class="table-head">Mahsulot</th><th class="table-head">Miqdor</th><th class="table-head">Havola</th><th class="table-head">Bajaruvchi</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for m in movements %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell text-xs text-gray-500">{{ m.created_at|date:"d.m.Y H:i" }}</td>
+          <td class="table-cell"><span class="badge {% if m.movement_type == 'inbound' %}bg-green-100 text-green-700{% elif m.movement_type == 'outbound' %}bg-red-100 text-red-700{% elif m.movement_type == 'return' %}bg-blue-100 text-blue-700{% else %}bg-gray-100 text-gray-700{% endif %}">{{ m.get_movement_type_display }}</span></td>
+          <td class="table-cell text-sm font-medium">{{ m.product.name|truncatechars:30 }}</td>
+          <td class="table-cell font-semibold">{{ m.quantity }}</td>
+          <td class="table-cell text-xs font-mono text-gray-500">{{ m.reference|truncatechars:20|default:"—" }}</td>
+          <td class="table-cell text-xs text-gray-500">{{ m.performed_by.username|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="py-12 text-center text-gray-400">Harakatlar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}<div class="flex justify-center gap-2 mt-5">{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="btn-secondary">← Oldingi</a>{% endif %}<span class="px-4 py-2 text-sm text-gray-600">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="btn-secondary">Keyingi →</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

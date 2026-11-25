@@ -1,0 +1,64 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ shipment.shipment_number }} — WMS Pro{% endblock %}
+{% block page_title %}Kirim: {{ shipment.shipment_number }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex flex-wrap gap-3">
+    <a href="{% url 'logistics:inbound_list' %}" class="btn-secondary">← Orqaga</a>
+    {% if shipment.status != 'completed' and shipment.status != 'cancelled' %}
+      <form method="post" action="{% url 'logistics:inbound_complete' shipment.pk %}" class="inline">{% csrf_token %}<button type="submit" class="btn-primary" onclick="return confirm('Yakunlashni tasdiqlaysizmi?')"><i class="ph-bold ph-check-circle"></i> Yakunlash</button></form>
+      <form method="post" action="{% url 'logistics:inbound_cancel' shipment.pk %}" class="inline">{% csrf_token %}<button type="submit" class="btn-danger" onclick="return confirm('Bekor qilishni tasdiqlaysizmi?')"><i class="ph-bold ph-x-circle"></i> Bekor qilish</button></form>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card">
+      <h3 class="font-semibold border-b pb-2 mb-3">Yetkazma ma'lumotlari</h3>
+      <div class="space-y-2 text-sm">
+        <div><span class="text-gray-500">Raqam:</span> <span class="font-mono font-medium">{{ shipment.shipment_number }}</span></div>
+        <div><span class="text-gray-500">Yetkazuvchi:</span> {{ shipment.supplier.name|default:"—" }}</div>
+        <div><span class="text-gray-500">Ombor:</span> {{ shipment.warehouse.name }}</div>
+        <div><span class="text-gray-500">Holat:</span> <span class="badge {% if shipment.status == 'completed' %}bg-green-100 text-green-700{% elif shipment.status == 'cancelled' %}bg-red-100 text-red-700{% elif shipment.status == 'receiving' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ shipment.get_status_display }}</span></div>
+        <div><span class="text-gray-500">Kutilgan:</span> {{ shipment.expected_arrival|date:"d.m.Y H:i"|default:"—" }}</div>
+        <div><span class="text-gray-500">Yaratuvchi:</span> {{ shipment.created_by|default:"—" }}</div>
+        {% if shipment.notes %}<div><span class="text-gray-500">Izoh:</span> {{ shipment.notes }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <h3 class="font-semibold border-b pb-2 mb-3">Elementlar</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b"><tr><th class="table-head">Mahsulot</th><th class="table-head">Kutilgan</th><th class="table-head">Qabul</th><th class="table-head">Shikast</th><th class="table-head">Joy</th>{% if shipment.status != 'completed' and shipment.status != 'cancelled' %}<th class="table-head">Qabul qilish</th>{% endif %}</tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for item in items %}
+            <tr>
+              <td class="table-cell font-medium">{{ item.product.name|truncatechars:25 }}<br><span class="text-xs text-gray-400">{{ item.product.sku }}</span></td>
+              <td class="table-cell">{{ item.expected_quantity }}</td>
+              <td class="table-cell text-green-600 font-semibold">{{ item.received_quantity }}</td>
+              <td class="table-cell text-red-600">{{ item.damaged_quantity }}</td>
+              <td class="table-cell text-xs text-gray-500">{{ item.target_location|default:"—" }}</td>
+              {% if shipment.status != 'completed' and shipment.status != 'cancelled' %}
+              <td class="table-cell">
+                <form method="post" action="{% url 'logistics:inbound_receive' shipment.pk %}" class="flex gap-1 items-center">
+                  {% csrf_token %}
+                  <input type="hidden" name="item_id" value="{{ item.pk }}">
+                  <input type="hidden" name="idempotency_token" value="{{ idempotency_token }}">
+                  <input type="number" name="received_qty" min="1" value="1" class="w-16 border rounded px-2 py-1 text-xs">
+                  <input type="number" name="damaged_qty" min="0" value="0" class="w-16 border rounded px-2 py-1 text-xs" placeholder="shikast">
+                  <select name="location_id" class="border rounded px-1 py-1 text-xs w-32">{% for loc in locations %}<option value="{{ loc.pk }}" {% if item.target_location == loc %}selected{% endif %}>{{ loc.barcode|truncatechars:18 }}</option>{% endfor %}</select>
+                  <button type="submit" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"><i class="ph-bold ph-check"></i></button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="py-6 text-center text-gray-400">Elementlar yo'q</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

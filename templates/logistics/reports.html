@@ -1,0 +1,35 @@
+{% extends 'base/base.html' %}
+{% block title %}Hisobotlar — WMS Pro{% endblock %}
+{% block page_title %}Hisobotlar{% endblock %}
+{% block content %}
+{% with role=request.user.role %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+  {% if role == 'admin' or role == 'warehouse_manager' %}
+  <a href="{% url 'logistics:report_inventory' %}" class="card hover:shadow-md transition-shadow block">
+    <div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center"><i class="ph-bold ph-archive text-xl"></i></span><h3 class="font-semibold">Zaxira hisoboti</h3></div>
+    <p class="text-sm text-gray-500">Mavjud partiyalar: qo'ldagi, band va erkin miqdorlar.</p>
+  </a>
+  <a href="{% url 'logistics:report_movements' %}" class="card hover:shadow-md transition-shadow block">
+    <div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center"><i class="ph-bold ph-arrows-left-right text-xl"></i></span><h3 class="font-semibold">Harakat hisoboti</h3></div>
+    <p class="text-sm text-gray-500">So'nggi 500 ta zaxira harakati.</p>
+  </a>
+  <a href="{% url 'logistics:report_inbound' %}" class="card hover:shadow-md transition-shadow block">
+    <div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-lg bg-green-100 text-green-700 flex items-center justify-center"><i class="ph-bold ph-download-simple text-xl"></i></span><h3 class="font-semibold">Kirim hisoboti</h3></div>
+    <p class="text-sm text-gray-500">Kirim yetkazmalari va ularning holati.</p>
+  </a>
+  {% endif %}
+  {% if role == 'admin' or role == 'warehouse_manager' or role == 'dispatcher' %}
+  <a href="{% url 'logistics:report_outbound' %}" class="card hover:shadow-md transition-shadow block">
+    <div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center"><i class="ph-bold ph-upload-simple text-xl"></i></span><h3 class="font-semibold">Chiqim hisoboti</h3></div>
+    <p class="text-sm text-gray-500">Chiqim buyurtmalari, holat va ustuvorlik.</p>
+  </a>
+  {% endif %}
+  {% if role == 'admin' or role == 'warehouse_manager' %}
+  <a href="{% url 'logistics:report_returns' %}" class="card hover:shadow-md transition-shadow block">
+    <div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-lg bg-red-100 text-red-700 flex items-center justify-center"><i class="ph-bold ph-arrow-u-up-left text-xl"></i></span><h3 class="font-semibold">Qaytarish hisoboti</h3></div>
+    <p class="text-sm text-gray-500">Qaytgan tovarlar, sabab va holati.</p>
+  </a>
+  {% endif %}
+</div>
+{% endwith %}
+{% endblock %}

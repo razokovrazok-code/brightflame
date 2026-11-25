@@ -1,0 +1,30 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ page_title }} — WMS Pro{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+{% block content %}
+<div class="card">
+  {% include 'logistics/_report_header.html' %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200"><tr><th class="table-head">Mahsulot</th><th class="table-head">SKU</th><th class="table-head">Sotuvchi</th><th class="table-head">Partiya</th><th class="table-head">Ombor</th><th class="table-head">Joy</th><th class="table-head">Qo'ldagi</th><th class="table-head">Band</th><th class="table-head">Erkin</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for b in batches %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell font-medium">{{ b.product.name|truncatechars:25 }}</td>
+          <td class="table-cell font-mono text-xs text-purple-700">{{ b.product.sku }}</td>
+          <td class="table-cell text-sm">{{ b.product.seller|default:"—" }}</td>
+          <td class="table-cell font-mono text-xs">{{ b.batch_number|truncatechars:20 }}</td>
+          <td class="table-cell text-sm">{{ b.location.warehouse.name }}</td>
+          <td class="table-cell font-mono text-xs">{{ b.location }}</td>
+          <td class="table-cell font-semibold">{{ b.quantity_on_hand }}</td>
+          <td class="table-cell text-yellow-600">{{ b.quantity_reserved }}</td>
+          <td class="table-cell text-green-600 font-semibold">{{ b.available_quantity }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="py-12 text-center text-gray-400">Ma'lumot yo'q</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

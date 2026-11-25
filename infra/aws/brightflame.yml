@@ -1,0 +1,514 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  BrightFlame WMS — ALB + EC2 Auto Scaling + RDS PostgreSQL + S3 + CloudWatch.
+  Xarajatni minimal qilish uchun NAT Gateway ishlatilmaydi; maxfiy ma'lumotlar
+  Secrets Manager'da avtomatik generatsiya qilinadi (kodda va GitHub'da yo'q).
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: razokovrazok-code/brightflame
+    Description: Kod olinadigan public GitHub repo (owner/name)
+  GitBranch:
+    Type: String
+    Default: main
+  DomainName:
+    Type: String
+    Default: brightflame.uz
+    Description: Ilova domeni (ALLOWED_HOSTS uchun). Bo'sh bo'lsa faqat ALB manzili ishlaydi.
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: HTTPS uchun ACM sertifikat ARN (ixtiyoriy, keyin qo'shish mumkin)
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t2.micro]
+  MinInstances:
+    Type: Number
+    Default: 1
+  MaxInstances:
+    Type: Number
+    Default: 3
+  CreateGitHubOIDCProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Akkauntda GitHub OIDC provider allaqachon bo'lsa false qiling
+
+Conditions:
+  HasCert: !Not [!Equals [!Ref CertificateArn, '']]
+  HasDomain: !Not [!Equals [!Ref DomainName, '']]
+  CreateOIDC: !Equals [!Ref CreateGitHubOIDCProvider, 'true']
+
+Resources:
+  # ── Tarmoq (VPC) ───────────────────────────────────────────────────────────
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-vpc'}]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: {VpcId: !Ref Vpc, InternetGatewayId: !Ref InternetGateway}
+
+  # Public subnetlar: ALB va EC2 (EC2'ga to'g'ridan-to'g'ri kirish SG bilan yopiq)
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-public-a'}]
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-public-b'}]
+  # Private subnetlar: faqat RDS (Internetga marshrut yo'q)
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-private-a'}]
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.12.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-private-b'}]
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: {VpcId: !Ref Vpc}
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRouteTable}
+  PublicSubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRouteTable}
+
+  # ── Security Groups (faqat zarur portlar) ─────────────────────────────────
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB - Internetdan faqat HTTP(80) va HTTPS(443)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS}
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EC2 - faqat ALB dan 8000-port (Gunicorn). SSH yopiq - kirish SSM Session Manager orqali
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref AlbSecurityGroup, Description: App from ALB}
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS - faqat EC2 ilovadan PostgreSQL(5432)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AppSecurityGroup, Description: PostgreSQL from app}
+
+  # ── S3: mahsulot rasmlari (private) ───────────────────────────────────────
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+
+  # ── Maxfiy ma'lumotlar (avtomatik generatsiya) ────────────────────────────
+  DjangoSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}/django'
+      Description: Django SECRET_KEY
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: secret_key
+        PasswordLength: 50
+        ExcludeCharacters: '"''\$`#= '
+  AdminSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}/admin'
+      Description: WMS admin foydalanuvchi login/paroli
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+        ExcludePunctuation: true
+
+  # ── RDS PostgreSQL (private, free tier klass) ─────────────────────────────
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for RDS
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Engine: postgres
+      EngineVersion: '16.13'
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: '20'
+      StorageType: gp2
+      StorageEncrypted: true
+      DBName: wms_db
+      MasterUsername: wms_admin
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref DbSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+
+  # ── IAM: EC2 roli (minimal huquqlar) ──────────────────────────────────────
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore   # SSH o'rniga Session Manager
+      Policies:
+        - PolicyName: app-minimal
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: MediaObjects
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub '${MediaBucket.Arn}/*'
+              - Sid: MediaList
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt MediaBucket.Arn
+              - Sid: ReadOwnSecrets
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DjangoSecret
+                  - !Ref AdminSecret
+                  - !GetAtt Database.MasterUserSecret.SecretArn
+              - Sid: AppLogs
+                Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
+                Resource: !Sub '${AppLogGroup.Arn}:*'
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # ── CloudWatch Logs ───────────────────────────────────────────────────────
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/${AWS::StackName}/app'
+      RetentionInDays: 7
+
+  # ── Load Balancer ─────────────────────────────────────────────────────────
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      SecurityGroups: [!Ref AlbSecurityGroup]
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 8000
+      TargetType: instance
+      HealthCheckPath: /health/
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher: {HttpCode: '200'}
+      TargetGroupAttributes:
+        - {Key: deregistration_delay.timeout_seconds, Value: '30'}
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: !If
+        - HasCert
+        - - Type: redirect
+            RedirectConfig: {Protocol: HTTPS, Port: '443', StatusCode: HTTP_301}
+        - - Type: forward
+            TargetGroupArn: !Ref TargetGroup
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCert
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates: [{CertificateArn: !Ref CertificateArn}]
+      DefaultActions:
+        - {Type: forward, TargetGroupArn: !Ref TargetGroup}
+
+  # ── EC2 Launch Template + Auto Scaling ────────────────────────────────────
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
+        SecurityGroupIds: [!Ref AppSecurityGroup]
+        MetadataOptions:
+          HttpTokens: required          # IMDSv2
+          HttpPutResponseHopLimit: 2    # Docker konteyner IAM rolini ishlata olishi uchun
+        TagSpecifications:
+          - ResourceType: instance
+            Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-web'}]
+        UserData:
+          Fn::Base64: !Sub
+            - |
+              #!/bin/bash
+              set -euxo pipefail
+              exec > >(tee /var/log/user-data.log) 2>&1
+              dnf install -y docker git jq
+              systemctl enable --now docker
+
+              TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+              PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+              INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+
+              git clone --depth 1 -b ${GitBranch} https://github.com/${GitHubRepo}.git /opt/app
+
+              secret() { aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id "$1" --query SecretString --output text; }
+              DB_JSON=$(secret '${DbSecretArn}')
+              APP_JSON=$(secret '${DjangoSecret}')
+              ADMIN_JSON=$(secret '${AdminSecret}')
+
+              umask 077
+              cat > /opt/app.env <<EOF
+              DEBUG=False
+              SECRET_KEY=$(echo "$APP_JSON" | jq -r .secret_key)
+              ALLOWED_HOSTS=$PRIVATE_IP,${LoadBalancer.DNSName}${HostsSuffix}
+              CSRF_TRUSTED_ORIGINS=http://${LoadBalancer.DNSName},https://${LoadBalancer.DNSName}${OriginsSuffix}
+              USE_HTTPS=${UseHttps}
+              DB_NAME=wms_db
+              DB_HOST=${Database.Endpoint.Address}
+              DB_PORT=${Database.Endpoint.Port}
+              DB_USER=$(echo "$DB_JSON" | jq -r .username)
+              DB_PASSWORD=$(echo "$DB_JSON" | jq -r .password)
+              AWS_STORAGE_BUCKET_NAME=${MediaBucket}
+              AWS_REGION=${AWS::Region}
+              DJANGO_ADMIN_USERNAME=$(echo "$ADMIN_JSON" | jq -r .username)
+              DJANGO_ADMIN_PASSWORD=$(echo "$ADMIN_JSON" | jq -r .password)
+              GUNICORN_WORKERS=2
+              GUNICORN_THREADS=2
+              EOF
+
+              docker build -t brightflame /opt/app
+              # Bir nechta instance bir vaqtda ko'tarilsa ham migrate xavfsiz (qayta urinish bilan)
+              for i in 1 2 3 4 5; do docker run --rm --env-file /opt/app.env brightflame python manage.py migrate --noinput && break || sleep 10; done
+              docker run --rm --env-file /opt/app.env brightflame python manage.py ensure_admin
+
+              docker run -d --name web --restart always -p 8000:8000 --env-file /opt/app.env \
+                --log-driver awslogs \
+                --log-opt awslogs-region=${AWS::Region} \
+                --log-opt awslogs-group=${AppLogGroup} \
+                --log-opt awslogs-stream=$INSTANCE_ID \
+                brightflame
+            - DbSecretArn: !GetAtt Database.MasterUserSecret.SecretArn
+              UseHttps: !If [HasCert, 'True', 'False']
+              HostsSuffix: !If [HasDomain, !Sub ',${DomainName},www.${DomainName}', '']
+              OriginsSuffix: !If [HasDomain, !Sub ',https://${DomainName},https://www.${DomainName},http://${DomainName},http://www.${DomainName}', '']
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: PublicDefaultRoute
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-asg'
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      DesiredCapacity: !Ref MinInstances
+      VPCZoneIdentifier: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      TargetGroupARNs: [!Ref TargetGroup]
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics: [GroupInServiceInstances, GroupDesiredCapacity]
+
+  # Autoscaling: o'rtacha CPU 50% dan oshsa instance qo'shiladi, tushsa kamayadi
+  CpuScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      EstimatedInstanceWarmup: 300
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification: {PredefinedMetricType: ASGAverageCPUUtilization}
+        TargetValue: 50
+
+  # ── CloudWatch monitoring ─────────────────────────────────────────────────
+  UnhealthyHostsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ALB ortida sog'lom bo'lmagan instance bor
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - {Name: LoadBalancer, Value: !GetAtt LoadBalancer.LoadBalancerFullName}
+        - {Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName}
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Ilova 5xx xatolar qaytaryapti
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions: [{Name: LoadBalancer, Value: !GetAtt LoadBalancer.LoadBalancerFullName}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  DbCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: RDS CPU yuqori
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions: [{Name: DBInstanceIdentifier, Value: !Ref Database}]
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}-monitoring'
+      DashboardBody: !Sub
+        - |
+          {"widgets":[
+            {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"ALB so'rovlar va javob vaqti","region":"${AWS::Region}","stat":"Sum","period":60,
+              "metrics":[["AWS/ApplicationELB","RequestCount","LoadBalancer","${Lb}"],[".","TargetResponseTime",".",".",{"stat":"Average","yAxis":"right"}]]}},
+            {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"Sog'lom instance'lar / Autoscaling","region":"${AWS::Region}","period":60,"stat":"Average",
+              "metrics":[["AWS/ApplicationELB","HealthyHostCount","LoadBalancer","${Lb}","TargetGroup","${Tg}"],["AWS/AutoScaling","GroupInServiceInstances","AutoScalingGroupName","${AutoScalingGroup}"]]}},
+            {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"EC2 CPU (ASG o'rtacha)","region":"${AWS::Region}","period":60,"stat":"Average",
+              "metrics":[["AWS/EC2","CPUUtilization","AutoScalingGroupName","${AutoScalingGroup}"]]}},
+            {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"RDS CPU va ulanishlar","region":"${AWS::Region}","period":60,"stat":"Average",
+              "metrics":[["AWS/RDS","CPUUtilization","DBInstanceIdentifier","${Database}"],[".","DatabaseConnections",".",".",{"yAxis":"right"}]]}},
+            {"type":"log","x":0,"y":12,"width":24,"height":6,"properties":{"title":"Ilova loglari","region":"${AWS::Region}",
+              "query":"SOURCE '${AppLogGroup}' | fields @timestamp, @logStream, @message | sort @timestamp desc | limit 50"}}
+          ]}
+        - Lb: !GetAtt LoadBalancer.LoadBalancerFullName
+          Tg: !GetAtt TargetGroup.TargetGroupFullName
+
+  # ── CI/CD: GitHub Actions uchun OIDC (access key'siz) ─────────────────────
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOIDC
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: GitHub Actions main branch'dan faqat instance refresh qila oladi
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - CreateOIDC
+                - !Ref GitHubOIDCProvider
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:ref:refs/heads/${GitBranch}'
+      Policies:
+        - PolicyName: instance-refresh-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:StartInstanceRefresh
+                Resource: !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}-asg'
+              - Effect: Allow
+                Action: autoscaling:DescribeInstanceRefreshes
+                Resource: '*'
+
+Outputs:
+  AppUrl:
+    Description: Ilova manzili (ALB)
+    Value: !Sub 'http://${LoadBalancer.DNSName}'
+  LoadBalancerDNS:
+    Description: Domen uchun CNAME qiymati
+    Value: !GetAtt LoadBalancer.DNSName
+  MediaBucketName:
+    Value: !Ref MediaBucket
+  AutoScalingGroupName:
+    Value: !Ref AutoScalingGroup
+  GitHubDeployRoleArn:
+    Description: GitHub repo variable AWS_DEPLOY_ROLE_ARN uchun
+    Value: !GetAtt GitHubDeployRole.Arn
+  AdminPasswordSecret:
+    Description: Admin paroli shu yerda (Secrets Manager -> Retrieve secret value)
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/secretsmanager/secret?name=${AWS::StackName}/admin&region=${AWS::Region}'
+  DashboardUrl:
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards/dashboard/${AWS::StackName}-monitoring'

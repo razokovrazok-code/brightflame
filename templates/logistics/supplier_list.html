@@ -1,0 +1,37 @@
+{% extends 'base/base.html' %}
+{% block title %}Yetkazib beruvchilar — WMS Pro{% endblock %}
+{% block page_title %}Yetkazib beruvchilar{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <form class="flex flex-wrap gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="Nomi yoki STIR..." class="form-input w-56">
+      <button type="submit" class="btn-primary">Qidirish</button>
+      {% if q %}<a href="{% url 'logistics:supplier_list' %}" class="btn-secondary">Tozalash</a>{% endif %}
+    </form>
+    {% if request.user.role == 'admin' or request.user.role == 'warehouse_manager' %}
+    <a href="{% url 'logistics:supplier_create' %}" class="btn-primary"><i class="ph-bold ph-plus"></i> Yangi yetkazib beruvchi</a>
+    {% endif %}
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200"><tr><th class="table-head">Nomi</th><th class="table-head">STIR</th><th class="table-head">Aloqa shaxsi</th><th class="table-head">Telefon</th><th class="table-head">Holat</th><th class="table-head">Amal</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for s in suppliers %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell font-medium">{{ s.name }}</td>
+          <td class="table-cell font-mono text-xs">{{ s.tax_number|default:"—" }}</td>
+          <td class="table-cell">{{ s.contact_person|default:"—" }}</td>
+          <td class="table-cell text-sm">{{ s.phone|default:"—" }}</td>
+          <td class="table-cell">{% if s.is_active %}<span class="badge bg-green-100 text-green-700">Faol</span>{% else %}<span class="badge bg-gray-100 text-gray-500">Nofaol</span>{% endif %}</td>
+          <td class="table-cell">{% if request.user.role == 'admin' or request.user.role == 'warehouse_manager' %}<a href="{% url 'logistics:supplier_update' s.pk %}" class="text-blue-600 hover:text-blue-800" title="Tahrirlash"><i class="ph-bold ph-pencil-simple"></i></a>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="py-12 text-center text-gray-400"><i class="ph-bold ph-truck text-3xl block mb-2"></i>Yetkazib beruvchilar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'base/_pagination.html' %}
+</div>
+{% endblock %}

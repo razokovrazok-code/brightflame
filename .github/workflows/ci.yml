@@ -1,0 +1,104 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: wms_test
+          POSTGRES_USER: wms_user
+          POSTGRES_PASSWORD: wms_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Flake8 lint
+        run: flake8 apps/ config/ --max-line-length=120 --exclude=migrations
+
+      - name: Run tests
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only
+          DEBUG: True
+          DB_NAME: wms_test
+          DB_USER: wms_user
+          DB_PASSWORD: wms_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          python manage.py migrate --noinput
+          python manage.py test apps --verbosity=2
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image (Dockerfile + collectstatic tekshiruvi)
+        run: docker build -t brightflame:ci .
+
+  # ── CD: AWS Auto Scaling Group'ni rolling yangilash ────────────────────────
+  # Access key ishlatilmaydi: GitHub OIDC token orqali faqat instance refresh
+  # huquqi bor IAM rol olinadi. Repo Settings -> Variables:
+  #   AWS_DEPLOY_ROLE_ARN (CloudFormation output), AWS_REGION, ASG_NAME
+  deploy:
+    needs: [test, docker-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      ASG_NAME: ${{ vars.ASG_NAME || 'brightflame-asg' }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start rolling instance refresh
+        id: refresh
+        run: |
+          # Avval yangi instance ko'tariladi (max 200%), sog'lom bo'lgach eskisi o'chiriladi
+          # (min 100%) — foydalanuvchilar uchun uzilish yo'q.
+          ID=$(aws autoscaling start-instance-refresh             --auto-scaling-group-name "$ASG_NAME"             --preferences '{"MinHealthyPercentage":100,"MaxHealthyPercentage":200,"InstanceWarmup":300}'             --query InstanceRefreshId --output text)
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for refresh to finish
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(aws autoscaling describe-instance-refreshes               --auto-scaling-group-name "$ASG_NAME"               --instance-refresh-ids "${{ steps.refresh.outputs.id }}"               --query 'InstanceRefreshes[0].Status' --output text)
+            echo "[$i] $STATUS"
+            case "$STATUS" in
+              Successful) exit 0 ;;
+              Failed|Cancelled|RollbackSuccessful|RollbackFailed) exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "Instance refresh 30 daqiqada tugamadi"; exit 1

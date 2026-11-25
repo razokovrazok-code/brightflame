@@ -1,0 +1,34 @@
+{% extends 'base/base.html' %}
+{% block title %}Jo'natmalar — WMS Pro{% endblock %}
+{% block page_title %}Jo'natmalar (qadoqlar){% endblock %}
+{% block content %}
+<div class="card">
+  <form class="flex flex-wrap gap-2 mb-5" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="Qadoq yoki buyurtma raqami..." class="form-input w-64">
+    <select name="status" class="form-select w-40"><option value="">Barcha holatlar</option>{% for val, label in status_choices %}<option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button type="submit" class="btn-primary">Qidirish</button>
+    {% if q or selected_status %}<a href="{% url 'logistics:package_list' %}" class="btn-secondary">Tozalash</a>{% endif %}
+  </form>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200"><tr><th class="table-head">Qadoq</th><th class="table-head">Buyurtma</th><th class="table-head">Sotuvchi</th><th class="table-head">Manzil</th><th class="table-head">Holat</th><th class="table-head">Qadoqlandi</th><th class="table-head">Jo'natildi</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for p in packages %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell font-mono text-sm font-medium">{{ p.package_number }}</td>
+          <td class="table-cell"><a href="{% url 'logistics:order_detail' p.order.pk %}" class="text-purple-700 hover:underline">{{ p.order.order_number }}</a></td>
+          <td class="table-cell text-sm">{{ p.order.seller.seller_name|truncatechars:18 }}</td>
+          <td class="table-cell text-sm text-gray-500">{{ p.destination|truncatechars:30 }}</td>
+          <td class="table-cell"><span class="badge {% if p.status == 'shipped' %}bg-green-100 text-green-700{% elif p.status == 'packed' %}bg-indigo-100 text-indigo-700{% else %}bg-gray-100 text-gray-600{% endif %}">{{ p.get_status_display }}</span></td>
+          <td class="table-cell text-xs text-gray-500">{{ p.packed_at|date:"d.m.Y H:i"|default:"—" }}</td>
+          <td class="table-cell text-xs text-gray-500">{{ p.shipped_at|date:"d.m.Y H:i"|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="py-12 text-center text-gray-400"><i class="ph-bold ph-package text-3xl block mb-2"></i>Qadoqlar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'base/_pagination.html' %}
+</div>
+{% endblock %}

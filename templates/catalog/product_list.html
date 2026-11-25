@@ -1,0 +1,77 @@
+{% extends 'base/base.html' %}
+{% block title %}Mahsulotlar — WMS Pro{% endblock %}
+{% block page_title %}Mahsulotlar{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <form class="flex flex-wrap gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="SKU, nomi, barcode..." class="form-input w-56">
+      <select name="category" class="form-select w-44">
+        <option value="">Barcha kategoriyalar</option>
+        {% for c in categories %}<option value="{{ c.pk }}" {% if selected_cat == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+      <select name="is_active" class="form-select w-36">
+        <option value="">Holat</option>
+        <option value="1" {% if selected_active == '1' %}selected{% endif %}>Faol</option>
+        <option value="0" {% if selected_active == '0' %}selected{% endif %}>Nofaol</option>
+      </select>
+      <button type="submit" class="btn-primary">Qidirish</button>
+      {% if q or selected_cat or selected_active %}<a href="{% url 'catalog:product_list' %}" class="btn-secondary">Tozalash</a>{% endif %}
+    </form>
+    <a href="{% url 'catalog:product_create' %}" class="btn-primary"><i class="ph-bold ph-plus"></i> Yangi mahsulot</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="table-head">SKU</th>
+          <th class="table-head">Nomi</th>
+          <th class="table-head">Barcode</th>
+          <th class="table-head">Kategoriya</th>
+          <th class="table-head">Sotuvchi</th>
+          <th class="table-head">Muddat</th>
+          <th class="table-head">Holat</th>
+          <th class="table-head">Amallar</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for product in products %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell font-mono text-xs text-purple-700">{{ product.sku }}</td>
+          <td class="table-cell font-medium">
+            <a href="{% url 'catalog:product_detail' product.pk %}" class="hover:text-purple-700">{{ product.name|truncatechars:35 }}</a>
+          </td>
+          <td class="table-cell font-mono text-xs text-gray-500">{{ product.barcode }}</td>
+          <td class="table-cell text-gray-600">{{ product.category.name }}</td>
+          <td class="table-cell text-gray-600">{{ product.seller.seller_name|truncatechars:20 }}</td>
+          <td class="table-cell">
+            {% if product.is_perishable %}<span class="badge bg-orange-100 text-orange-700">Muddat</span>{% else %}<span class="badge bg-gray-100 text-gray-500">Yo'q</span>{% endif %}
+          </td>
+          <td class="table-cell">
+            {% if product.is_active %}<span class="badge bg-green-100 text-green-700">Faol</span>{% else %}<span class="badge bg-red-100 text-red-700">Nofaol</span>{% endif %}
+          </td>
+          <td class="table-cell">
+            <div class="flex gap-2">
+              <a href="{% url 'catalog:product_detail' product.pk %}" class="text-gray-400 hover:text-blue-600"><i class="ph-bold ph-eye"></i></a>
+              <a href="{% url 'catalog:product_update' product.pk %}" class="text-gray-400 hover:text-blue-600"><i class="ph-bold ph-pencil"></i></a>
+              <form method="post" action="{% url 'catalog:product_delete' product.pk %}" onsubmit="return confirm('O\'chirmoqchimisiz?')">
+                {% csrf_token %}<button type="submit" class="text-gray-400 hover:text-red-600"><i class="ph-bold ph-trash"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-12 text-center text-gray-400"><i class="ph-bold ph-package text-3xl block mb-2"></i>Mahsulotlar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}
+  <div class="flex justify-center gap-2 mt-5">
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ q }}" class="btn-secondary">← Oldingi</a>{% endif %}
+    <span class="px-4 py-2 text-sm text-gray-600">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ q }}" class="btn-secondary">Keyingi →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

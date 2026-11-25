@@ -1,0 +1,211 @@
+{% extends 'base/base.html' %}
+{% block title %}Dashboard — WMS Pro{% endblock %}
+{% block page_title %}Asosiy panel{% endblock %}
+
+{% block content %}
+<!-- Stats Row 1 -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="card">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Jami SKU</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1">{{ total_skus }}</p>
+      </div>
+      <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+        <i class="ph-bold ph-package text-purple-700 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Jami dona</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1">{{ total_units }}</p>
+      </div>
+      <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+        <i class="ph-bold ph-archive text-blue-700 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Band</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1">{{ reserved_units }}</p>
+      </div>
+      <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+        <i class="ph-bold ph-lock text-yellow-700 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Bugun kirim</p>
+        <p class="text-2xl font-bold text-green-600 mt-1">+{{ today_inbound }}</p>
+        <p class="text-xs text-red-500 mt-0.5">-{{ today_outbound }} chiqim</p>
+      </div>
+      <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+        <i class="ph-bold ph-trend-up text-green-700 text-xl"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stats Row 2 -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+  <a href="{% url 'logistics:picking_list' %}" class="card hover:shadow-md transition-shadow">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+        <i class="ph-bold ph-hand-pointing text-orange-600 text-2xl"></i>
+      </div>
+      <div>
+        <p class="text-2xl font-bold text-gray-800">{{ picking_orders }}</p>
+        <p class="text-sm text-gray-500">Yig'ilayotgan buyurtma</p>
+      </div>
+    </div>
+  </a>
+  <div class="card">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+        <i class="ph-bold ph-warning text-red-600 text-2xl"></i>
+      </div>
+      <div>
+        <p class="text-2xl font-bold text-gray-800">{{ expiring_batches|length }}</p>
+        <p class="text-sm text-gray-500">Muddat yaqin (7 kun)</p>
+      </div>
+    </div>
+  </div>
+  <a href="{% url 'logistics:inbound_list' %}" class="card hover:shadow-md transition-shadow">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
+        <i class="ph-bold ph-arrow-circle-down text-teal-600 text-2xl"></i>
+      </div>
+      <div>
+        <p class="text-2xl font-bold text-gray-800">{{ recent_inbound|length }}</p>
+        <p class="text-sm text-gray-500">Kutilayotgan kirim</p>
+      </div>
+    </div>
+  </a>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <div class="card lg:col-span-2">
+    <h3 class="text-sm font-semibold text-gray-700 mb-4">Kirim / Chiqim (14 kun)</h3>
+    <canvas id="flowChart" height="100"></canvas>
+  </div>
+  <div class="card">
+    <h3 class="text-sm font-semibold text-gray-700 mb-4">Kategoriya bo'yicha</h3>
+    <canvas id="catChart" height="200"></canvas>
+  </div>
+</div>
+
+<!-- Tables Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Active Orders -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-sm font-semibold text-gray-700">Faol buyurtmalar</h3>
+      <a href="{% url 'logistics:order_list' %}" class="text-xs text-purple-600 hover:underline">Barchasi →</a>
+    </div>
+    {% if active_orders %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="border-b border-gray-100">
+          <th class="text-left py-2 text-xs text-gray-500 font-medium">Raqam</th>
+          <th class="text-left py-2 text-xs text-gray-500 font-medium">Sotuvchi</th>
+          <th class="text-left py-2 text-xs text-gray-500 font-medium">Holat</th>
+        </tr></thead>
+        <tbody class="divide-y divide-gray-50">
+          {% for order in active_orders %}
+          <tr class="hover:bg-gray-50">
+            <td class="py-2"><a href="{% url 'logistics:order_detail' order.pk %}" class="text-purple-700 hover:underline font-medium">{{ order.order_number }}</a></td>
+            <td class="py-2 text-gray-600">{{ order.seller.seller_name|truncatechars:15 }}</td>
+            <td class="py-2">
+              <span class="badge {% if order.status == 'picking' %}bg-yellow-100 text-yellow-800{% elif order.status == 'allocated' %}bg-blue-100 text-blue-800{% elif order.status == 'packed' %}bg-indigo-100 text-indigo-800{% else %}bg-gray-100 text-gray-700{% endif %}">
+                {{ order.get_status_display }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-gray-400">
+      <i class="ph-bold ph-shopping-cart text-3xl"></i>
+      <p class="mt-2 text-sm">Faol buyurtmalar yo'q</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Expiring Batches -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-sm font-semibold text-gray-700">Muddat yaqin partiyalar</h3>
+      <a href="{% url 'warehouse:inventory_list' %}" class="text-xs text-purple-600 hover:underline">Barchasi →</a>
+    </div>
+    {% if expiring_batches %}
+    <div class="space-y-2">
+      {% for batch in expiring_batches %}
+      <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+        <div>
+          <p class="text-sm font-medium text-gray-800">{{ batch.product.name|truncatechars:25 }}</p>
+          <p class="text-xs text-gray-500">{{ batch.batch_number }} • {{ batch.quantity_on_hand }} dona</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs font-semibold text-red-600">{{ batch.expiry_date }}</p>
+          <p class="text-xs text-gray-400">{{ batch.location }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-gray-400">
+      <i class="ph-bold ph-check-circle text-3xl text-green-400"></i>
+      <p class="mt-2 text-sm">Muddat yaqin partiya yo'q</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const labels = {{ chart_labels|safe }};
+const inboundData = {{ chart_inbound|safe }};
+const outboundData = {{ chart_outbound|safe }};
+const catLabels = {{ cat_labels|safe }};
+const catValues = {{ cat_values|safe }};
+
+// Flow Chart
+const flowCtx = document.getElementById('flowChart').getContext('2d');
+new Chart(flowCtx, {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Kirim', data: inboundData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)', tension: 0.3, fill: true, pointRadius: 3 },
+      { label: 'Chiqim', data: outboundData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', tension: 0.3, fill: true, pointRadius: 3 },
+    ]
+  },
+  options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+});
+
+// Category Donut
+if (catLabels.length > 0) {
+  const catCtx = document.getElementById('catChart').getContext('2d');
+  new Chart(catCtx, {
+    type: 'doughnut',
+    data: {
+      labels: catLabels,
+      datasets: [{ data: catValues, backgroundColor: ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#7c3aed','#64748b'], hoverOffset: 4 }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+  });
+}
+</script>
+{% endblock %}

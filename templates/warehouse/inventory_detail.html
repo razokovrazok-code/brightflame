@@ -1,0 +1,40 @@
+{% extends 'base/base.html' %}
+{% block title %}Partiya tafsilot — WMS Pro{% endblock %}
+{% block page_title %}Partiya: {{ batch.batch_number }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <a href="{% url 'warehouse:inventory_list' %}" class="btn-secondary">← Zaxiralarga qaytish</a>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+      <h3 class="font-semibold border-b pb-2 mb-3">Partiya ma'lumotlari</h3>
+      <div class="space-y-2 text-sm">
+        <div><span class="text-gray-500">Partiya:</span> <span class="font-mono font-medium">{{ batch.batch_number }}</span></div>
+        <div><span class="text-gray-500">Mahsulot:</span> {{ batch.product.name }} ({{ batch.product.sku }})</div>
+        <div><span class="text-gray-500">Joy:</span> {{ batch.location }}</div>
+        <div><span class="text-gray-500">Qo'ldagi:</span> <strong>{{ batch.quantity_on_hand }}</strong></div>
+        <div><span class="text-gray-500">Band:</span> <strong class="text-yellow-600">{{ batch.quantity_reserved }}</strong></div>
+        <div><span class="text-gray-500">Erkin:</span> <strong class="text-green-600">{{ batch.available_quantity }}</strong></div>
+        <div><span class="text-gray-500">Muddati:</span> {{ batch.expiry_date|default:"—" }}</div>
+        <div><span class="text-gray-500">Qabul qilingan:</span> {{ batch.received_at }}</div>
+        <div><span class="text-gray-500">Holati:</span> <span class="badge {% if batch.condition == 'available' %}bg-green-100 text-green-700{% elif batch.condition == 'damaged' %}bg-red-100 text-red-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">{{ batch.get_condition_display }}</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="font-semibold border-b pb-2 mb-3">Harakatlar</h3>
+      <div class="space-y-2">
+        {% for m in batch.movements.all|slice:":15" %}
+        <div class="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
+          <div>
+            <span class="badge {% if m.movement_type == 'inbound' %}bg-green-100 text-green-700{% elif m.movement_type == 'outbound' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ m.get_movement_type_display }}</span>
+            <span class="ml-2 text-gray-600">x{{ m.quantity }}</span>
+          </div>
+          <span class="text-gray-400">{{ m.created_at|date:"d.m.Y H:i" }}</span>
+        </div>
+        {% empty %}
+        <p class="text-center text-gray-400 py-4">Harakatlar yo'q</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

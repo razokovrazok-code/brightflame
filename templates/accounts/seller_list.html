@@ -1,0 +1,40 @@
+﻿{% extends 'base/base.html' %}
+{% block title %}Sotuvchilar — WMS Pro{% endblock %}
+{% block page_title %}Sotuvchilar{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex items-center justify-between mb-5">
+    <form class="flex gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="Qidirish..." class="form-input w-64">
+      <button type="submit" class="btn-primary">Qidirish</button>
+    </form>
+    <a href="{% url 'accounts:seller_create' %}" class="btn-primary"><i class="ph-bold ph-plus"></i> Yangi sotuvchi</a>
+  </div>
+  <table class="w-full">
+    <thead class="bg-gray-50 border-b border-gray-200">
+      <tr>
+        <th class="table-head">Nomi</th>
+        <th class="table-head">Kodi</th>
+        <th class="table-head">Foydalanuvchi</th>
+        <th class="table-head">Aloqa</th>
+        <th class="table-head">Holat</th>
+        <th class="table-head">Amallar</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for seller in sellers %}
+      <tr class="hover:bg-gray-50">
+        <td class="table-cell font-medium">{{ seller.seller_name }}</td>
+        <td class="table-cell text-gray-500">{{ seller.seller_code }}</td>
+        <td class="table-cell">{{ seller.user.username }}</td>
+        <td class="table-cell text-gray-500 text-xs">{{ seller.contact_info|truncatechars:30|default:"—" }}</td>
+        <td class="table-cell">{% if seller.is_active %}<span class="badge bg-green-100 text-green-700">Faol</span>{% else %}<span class="badge bg-red-100 text-red-700">Nofaol</span>{% endif %}</td>
+        <td class="table-cell"><a href="{% url 'accounts:seller_update' seller.pk %}" class="text-blue-600 hover:text-blue-800"><i class="ph-bold ph-pencil"></i></a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="py-12 text-center text-gray-400">Sotuvchilar topilmadi</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

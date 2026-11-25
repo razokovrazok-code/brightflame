@@ -1,0 +1,27 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ page_title|default:"Mahsulot" }} — WMS Pro{% endblock %}
+{% block page_title %}{{ page_title|default:"Mahsulot" }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl">
+  <div class="card">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% for field in form %}
+        <div {% if field.name == 'name' or field.name == 'wb_article' or field.name == 'image' %}class="sm:col-span-2"{% endif %}>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            {{ field.label }}{% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+          </label>
+          {{ field }}
+          {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors|join:", " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="flex gap-3 mt-6 pt-5 border-t border-gray-100">
+        <button type="submit" class="btn-primary"><i class="ph-bold ph-floppy-disk"></i> Saqlash</button>
+        <a href="{% url 'catalog:product_list' %}" class="btn-secondary">Bekor qilish</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

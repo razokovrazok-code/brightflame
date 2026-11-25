@@ -1,0 +1,37 @@
+{% extends 'base/base.html' %}
+{% block title %}Buyurtmalar — WMS Pro{% endblock %}
+{% block page_title %}Buyurtmalar{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <form class="flex flex-wrap gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="Buyurtma raqami..." class="form-input w-52">
+      <select name="status" class="form-select w-36"><option value="">Holat</option>{% for val, label in status_choices %}<option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <select name="sales_model" class="form-select w-28"><option value="">Model</option>{% for val, label in sales_models %}<option value="{{ val }}" {% if selected_model == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <button type="submit" class="btn-primary">Qidirish</button>
+    </form>
+    <a href="{% url 'logistics:order_create' %}" class="btn-primary"><i class="ph-bold ph-plus"></i> Yangi buyurtma</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full"><thead class="bg-gray-50 border-b"><tr><th class="table-head">Raqam</th><th class="table-head">Sotuvchi</th><th class="table-head">Ombor</th><th class="table-head">Model</th><th class="table-head">Holat</th><th class="table-head">Ustuvorlik</th><th class="table-head">Yaratildi</th><th class="table-head">Amal</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for o in orders %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell"><a href="{% url 'logistics:order_detail' o.pk %}" class="text-purple-700 font-medium hover:underline">{{ o.order_number }}</a></td>
+          <td class="table-cell text-sm">{{ o.seller.seller_name|truncatechars:18 }}</td>
+          <td class="table-cell text-sm">{{ o.warehouse.name|truncatechars:18 }}</td>
+          <td class="table-cell"><span class="badge {% if o.sales_model == 'FBW' %}bg-purple-100 text-purple-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ o.sales_model }}</span></td>
+          <td class="table-cell"><span class="badge {% if o.status == 'created' %}bg-gray-100 text-gray-700{% elif o.status == 'allocated' %}bg-blue-100 text-blue-700{% elif o.status == 'picking' %}bg-yellow-100 text-yellow-800{% elif o.status == 'picked' %}bg-teal-100 text-teal-700{% elif o.status == 'packed' %}bg-indigo-100 text-indigo-700{% elif o.status == 'shipped' or o.status == 'completed' %}bg-green-100 text-green-700{% elif o.status == 'cancelled' %}bg-red-100 text-red-700{% elif o.status == 'needs_stock' %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-700{% endif %}">{{ o.get_status_display }}</span></td>
+          <td class="table-cell"><span class="badge {% if o.priority == 'urgent' %}bg-red-100 text-red-700{% elif o.priority == 'high' %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-600{% endif %}">{{ o.get_priority_display }}</span></td>
+          <td class="table-cell text-xs text-gray-500">{{ o.created_at|date:"d.m.Y" }}</td>
+          <td class="table-cell"><a href="{% url 'logistics:order_detail' o.pk %}" class="text-blue-600 hover:text-blue-800"><i class="ph-bold ph-eye"></i></a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-12 text-center text-gray-400"><i class="ph-bold ph-shopping-cart text-3xl block mb-2"></i>Buyurtmalar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}<div class="flex justify-center gap-2 mt-5">{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="btn-secondary">←</a>{% endif %}<span class="px-4 py-2 text-sm">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="btn-secondary">→</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

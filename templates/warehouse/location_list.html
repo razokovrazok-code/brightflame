@@ -1,0 +1,37 @@
+{% extends 'base/base.html' %}
+{% block title %}Saqlash joylari — WMS Pro{% endblock %}
+{% block page_title %}Saqlash joylari{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="flex items-center justify-between mb-5">
+    <form class="flex gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="Barcode, zona..." class="form-input w-56">
+      <select name="warehouse" class="form-select w-44"><option value="">Barcha omborlar</option>{% for w in warehouses %}<option value="{{ w.pk }}" {% if selected_wh == w.pk|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select>
+      <button type="submit" class="btn-primary">Qidirish</button>
+    </form>
+    <a href="{% url 'warehouse:location_create' %}" class="btn-primary"><i class="ph-bold ph-plus"></i> Yangi joy</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200"><tr><th class="table-head">Barcode</th><th class="table-head">Ombor</th><th class="table-head">Zona</th><th class="table-head">Stellaj</th><th class="table-head">Javon</th><th class="table-head">Poz.</th><th class="table-head">Holat</th><th class="table-head">Amal</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for loc in locations %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell font-mono text-xs font-medium text-purple-700">{{ loc.barcode }}</td>
+          <td class="table-cell text-sm">{{ loc.warehouse.name }}</td>
+          <td class="table-cell">{{ loc.zone }}</td>
+          <td class="table-cell">{{ loc.rack }}</td>
+          <td class="table-cell">{{ loc.shelf }}</td>
+          <td class="table-cell">{{ loc.position }}</td>
+          <td class="table-cell">{% if loc.is_active %}<span class="badge bg-green-100 text-green-700">Faol</span>{% else %}<span class="badge bg-red-100 text-red-700">Nofaol</span>{% endif %}</td>
+          <td class="table-cell"><a href="{% url 'warehouse:location_update' loc.pk %}" class="text-blue-600 hover:text-blue-800"><i class="ph-bold ph-pencil"></i></a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-12 text-center text-gray-400"><i class="ph-bold ph-map-pin text-3xl block mb-2"></i>Joylar topilmadi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}<div class="flex justify-center gap-2 mt-5">{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="btn-secondary">← Oldingi</a>{% endif %}<span class="px-4 py-2 text-sm text-gray-600">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="btn-secondary">Keyingi →</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

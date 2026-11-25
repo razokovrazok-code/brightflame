@@ -1,0 +1,30 @@
+{% extends 'base/base.html' %}
+{% block title %}Yig'ish — WMS Pro{% endblock %}
+{% block page_title %}Yig'ish navbati{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="text-sm text-gray-500 mb-4">{% if request.user.role == 'picker' %}Sizga tayinlangan buyurtmalar.{% else %}Zaxirasi ajratilgan va yig'ilayotgan buyurtmalar.{% endif %}</p>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200"><tr><th class="table-head">Raqam</th><th class="table-head">Sotuvchi</th><th class="table-head">Ombor</th><th class="table-head">Holat</th><th class="table-head">Ustuvorlik</th><th class="table-head">Yig'uvchi</th><th class="table-head">Muddat</th><th class="table-head">Amal</th></tr></thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for o in orders %}
+        <tr class="hover:bg-gray-50">
+          <td class="table-cell"><a href="{% url 'logistics:picking_detail' o.pk %}" class="text-purple-700 font-medium hover:underline">{{ o.order_number }}</a></td>
+          <td class="table-cell text-sm">{{ o.seller.seller_name|truncatechars:18 }}</td>
+          <td class="table-cell text-sm">{{ o.warehouse.name|truncatechars:18 }}</td>
+          <td class="table-cell"><span class="badge {% if o.status == 'picking' %}bg-yellow-100 text-yellow-800{% else %}bg-blue-100 text-blue-700{% endif %}">{{ o.get_status_display }}</span></td>
+          <td class="table-cell"><span class="badge {% if o.priority == 'urgent' %}bg-red-100 text-red-700{% elif o.priority == 'high' %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-600{% endif %}">{{ o.get_priority_display }}</span></td>
+          <td class="table-cell text-sm">{{ o.assigned_picker.get_full_name|default:o.assigned_picker.username|default:"—" }}</td>
+          <td class="table-cell text-xs text-gray-500">{{ o.deadline|date:"d.m.Y H:i"|default:"—" }}</td>
+          <td class="table-cell"><a href="{% url 'logistics:picking_detail' o.pk %}" class="btn-secondary !py-1 !px-3 text-xs"><i class="ph-bold ph-hand-pointing"></i> Yig'ish</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-12 text-center text-gray-400"><i class="ph-bold ph-hand-pointing text-3xl block mb-2"></i>Yig'ish uchun buyurtmalar yo'q</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'base/_pagination.html' %}
+</div>
+{% endblock %}

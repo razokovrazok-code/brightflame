@@ -1,0 +1,25 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ page_title|default:"Foydalanuvchi" }} — WMS Pro{% endblock %}
+{% block page_title %}{{ page_title|default:"Foydalanuvchi" }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl">
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% for field in form %}
+        <div {% if field.field.widget.attrs.class == 'form-input' and field.name == 'email' %}class="sm:col-span-2"{% endif %}>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}{% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors|join:", " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="flex gap-3 mt-6 pt-5 border-t border-gray-100">
+        <button type="submit" class="btn-primary"><i class="ph-bold ph-floppy-disk"></i> {{ action|default:"Saqlash" }}</button>
+        <a href="{% url 'accounts:user_list' %}" class="btn-secondary">Bekor qilish</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

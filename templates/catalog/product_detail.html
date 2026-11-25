@@ -1,0 +1,89 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ product.name }} — WMS Pro{% endblock %}
+{% block page_title %}{{ product.name }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex gap-3">
+    <a href="{% url 'catalog:product_update' product.pk %}" class="btn-primary"><i class="ph-bold ph-pencil"></i> Tahrirlash</a>
+    <a href="{% url 'catalog:product_list' %}" class="btn-secondary">← Orqaga</a>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2 space-y-3">
+      <h3 class="font-semibold text-gray-800 border-b pb-3">Mahsulot ma'lumotlari</h3>
+      {% if product.image %}
+      <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-48 h-48 object-cover rounded-lg border border-gray-100">
+      {% endif %}
+      <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <div><span class="text-gray-500">SKU:</span> <span class="font-mono font-medium text-purple-700">{{ product.sku }}</span></div>
+        <div><span class="text-gray-500">Barcode:</span> <span class="font-mono">{{ product.barcode }}</span></div>
+        <div><span class="text-gray-500">Sotuvchi:</span> {{ product.seller.seller_name }}</div>
+        <div><span class="text-gray-500">Kategoriya:</span> {{ product.category.name }}</div>
+        <div><span class="text-gray-500">Brend:</span> {{ product.brand|default:"—" }}</div>
+        <div><span class="text-gray-500">Birlik:</span> {{ product.get_unit_display }}</div>
+        <div><span class="text-gray-500">O'lchami:</span> {{ product.size|default:"—" }}</div>
+        <div><span class="text-gray-500">Rangi:</span> {{ product.color|default:"—" }}</div>
+        <div><span class="text-gray-500">Vazni:</span> {% if product.weight %}{{ product.weight }} kg{% else %}—{% endif %}</div>
+        <div><span class="text-gray-500">Muddat nazorati:</span> {% if product.is_perishable %}<span class="badge bg-orange-100 text-orange-700">Ha</span>{% else %}Yo'q{% endif %}</div>
+        <div><span class="text-gray-500">Min. zaxira:</span> {{ product.min_stock_limit }}</div>
+        <div><span class="text-gray-500">Holati:</span> {% if product.is_active %}<span class="badge bg-green-100 text-green-700">Faol</span>{% else %}<span class="badge bg-red-100 text-red-700">Nofaol</span>{% endif %}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 border-b pb-3 mb-3">Zaxira holati</h3>
+      {% with total=product.get_total_stock avail=product.get_available_stock %}
+      <div class="space-y-3">
+        <div class="text-center">
+          <p class="text-3xl font-bold text-gray-800">{{ total }}</p>
+          <p class="text-sm text-gray-500">Jami dona</p>
+        </div>
+        <div class="text-center">
+          <p class="text-2xl font-bold text-green-600">{{ avail }}</p>
+          <p class="text-sm text-gray-500">Erkin</p>
+        </div>
+        <div class="text-center">
+          <p class="text-xl font-bold text-yellow-600">{{ total_reserved }}</p>
+          <p class="text-sm text-gray-500">Band</p>
+        </div>
+      </div>
+      {% endwith %}
+    </div>
+  </div>
+
+  <!-- Inventory Batches -->
+  <div class="card">
+    <h3 class="font-semibold text-gray-800 mb-4">Inventar partiyalari</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b">
+          <tr>
+            <th class="table-head">Partiya</th>
+            <th class="table-head">Joy</th>
+            <th class="table-head">Qo'ldagi</th>
+            <th class="table-head">Band</th>
+            <th class="table-head">Erkin</th>
+            <th class="table-head">Muddati</th>
+            <th class="table-head">Holat</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for batch in product.inventory_batches.all %}
+          <tr class="hover:bg-gray-50">
+            <td class="table-cell font-mono text-xs">{{ batch.batch_number }}</td>
+            <td class="table-cell text-xs text-gray-500">{{ batch.location }}</td>
+            <td class="table-cell font-medium">{{ batch.quantity_on_hand }}</td>
+            <td class="table-cell text-yellow-600">{{ batch.quantity_reserved }}</td>
+            <td class="table-cell text-green-600">{{ batch.available_quantity }}</td>
+            <td class="table-cell text-xs">{{ batch.expiry_date|default:"—" }}</td>
+            <td class="table-cell">
+              <span class="badge {% if batch.condition == 'available' %}bg-green-100 text-green-700{% elif batch.condition == 'damaged' %}bg-red-100 text-red-700{% elif batch.condition == 'expired' %}bg-gray-100 text-gray-500{% else %}bg-yellow-100 text-yellow-700{% endif %}">{{ batch.get_condition_display }}</span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="py-6 text-center text-gray-400">Partiyalar mavjud emas</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

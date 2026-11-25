@@ -1,0 +1,65 @@
+{% extends 'base/base.html' %}
+{% block title %}Yig'ish: {{ order.order_number }} — WMS Pro{% endblock %}
+{% block page_title %}Yig'ish: {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex flex-wrap gap-3">
+    <a href="{% url 'logistics:picking_list' %}" class="btn-secondary">← Yig'ish navbati</a>
+    {% if request.user.role != 'picker' %}<a href="{% url 'logistics:order_detail' order.pk %}" class="btn-secondary">Buyurtma tafsiloti</a>{% endif %}
+  </div>
+
+  <div class="card">
+    <div class="flex flex-wrap justify-between gap-4 text-sm">
+      <div><span class="text-gray-500">Ombor:</span> {{ order.warehouse.name }}</div>
+      <div><span class="text-gray-500">Holat:</span> <span class="badge {% if order.status == 'picked' %}bg-teal-100 text-teal-700{% elif order.status == 'picking' %}bg-yellow-100 text-yellow-800{% else %}bg-blue-100 text-blue-700{% endif %}">{{ order.get_status_display }}</span></div>
+      <div><span class="text-gray-500">Yig'uvchi:</span> {{ order.assigned_picker|default:"Tayinlanmagan" }}</div>
+      <div><span class="text-gray-500">Muddat:</span> {{ order.deadline|date:"d.m.Y H:i"|default:"—" }}</div>
+    </div>
+    <div class="mt-4">
+      <div class="flex justify-between text-xs mb-1"><span>Jarayon</span><span>{{ progress }}%</span></div>
+      <div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-purple-600 h-2 rounded-full" style="width: {{ progress }}%"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="font-semibold border-b pb-2 mb-3">Yig'ish ro'yxati</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b"><tr><th class="table-head">Mahsulot</th><th class="table-head">Joy</th><th class="table-head">Partiya</th><th class="table-head">Band</th><th class="table-head">Yig'ilgan</th><th class="table-head">Qoldi</th><th class="table-head">Amal</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for item in items %}
+            {% for alloc in item.allocations.all %}
+            <tr class="hover:bg-gray-50">
+              <td class="table-cell"><div class="font-medium">{{ item.product.name|truncatechars:28 }}</div><div class="font-mono text-xs text-purple-700">{{ item.product.sku }}</div></td>
+              <td class="table-cell font-mono text-xs">{{ alloc.inventory_batch.location }}</td>
+              <td class="table-cell font-mono text-xs">{{ alloc.inventory_batch.batch_number|truncatechars:20 }}</td>
+              <td class="table-cell text-blue-600">{{ alloc.reserved_quantity }}</td>
+              <td class="table-cell text-green-600">{{ alloc.picked_quantity }}</td>
+              <td class="table-cell font-semibold">{{ alloc.remaining_to_pick }}</td>
+              <td class="table-cell">
+                {% if alloc.remaining_to_pick > 0 and order.status == 'picking' or alloc.remaining_to_pick > 0 and order.status == 'allocated' and request.user.role != 'picker' %}
+                <form method="post" action="{% url 'logistics:pick_item' order.pk %}" class="flex gap-2 items-center">{% csrf_token %}
+                  <input type="hidden" name="allocation_id" value="{{ alloc.pk }}">
+                  <input type="hidden" name="idempotency_token" value="{{ idempotency_token }}">
+                  <input type="number" name="picked_qty" value="{{ alloc.remaining_to_pick }}" min="1" max="{{ alloc.remaining_to_pick }}" class="form-input !w-20">
+                  <button type="submit" class="btn-primary !py-1.5"><i class="ph-bold ph-check"></i></button>
+                </form>
+                {% elif alloc.remaining_to_pick > 0 %}
+                <span class="text-xs text-gray-400">Yig'uvchi tayinlanmagan</span>
+                {% else %}
+                <span class="badge bg-green-100 text-green-700">Yig'ildi</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td class="table-cell font-medium">{{ item.product.name }}</td><td colspan="6" class="table-cell text-xs text-orange-600">Zaxira ajratilmagan</td></tr>
+            {% endfor %}
+          {% empty %}
+          <tr><td colspan="7" class="py-8 text-center text-gray-400">Elementlar yo'q</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
