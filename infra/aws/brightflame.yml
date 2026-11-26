@@ -20,6 +20,10 @@ Parameters:
     Type: String
     Default: ''
     Description: HTTPS uchun ACM sertifikat ARN (ixtiyoriy, keyin qo'shish mumkin)
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: Route 53 hosted zone ID (domen ALB'ga ulanadi). Bo'sh bo'lsa DNS yozuvlari yaratilmaydi.
   InstanceType:
     Type: String
     Default: t3.micro
@@ -40,6 +44,9 @@ Conditions:
   HasCert: !Not [!Equals [!Ref CertificateArn, '']]
   HasDomain: !Not [!Equals [!Ref DomainName, '']]
   CreateOIDC: !Equals [!Ref CreateGitHubOIDCProvider, 'true']
+  HasZone: !And
+    - !Not [!Equals [!Ref HostedZoneId, '']]
+    - !Condition HasDomain
 
 Resources:
   # ── Tarmoq (VPC) ───────────────────────────────────────────────────────────
@@ -291,6 +298,30 @@ Resources:
       DefaultActions:
         - {Type: forward, TargetGroupArn: !Ref TargetGroup}
 
+  # ── DNS: brightflame.uz va www -> ALB (Route 53 alias, bepul so'rovlar) ──
+  ApexDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: true
+  WwwDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub 'www.${DomainName}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: true
+
   # ── EC2 Launch Template + Auto Scaling ────────────────────────────────────
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -494,6 +525,9 @@ Resources:
                 Resource: '*'
 
 Outputs:
+  DomainUrl:
+    Condition: HasZone
+    Value: !If [HasCert, !Sub 'https://${DomainName}', !Sub 'http://${DomainName}']
   AppUrl:
     Description: Ilova manzili (ALB)
     Value: !Sub 'http://${LoadBalancer.DNSName}'
