@@ -511,9 +511,16 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-              # Faqat shu repo; branch cheklovi workflow'da (deploy faqat main push'da)
+              # Faqat shu repo va faqat main branch. GitHub sub formati ikki xil bo'lishi mumkin:
+              #   repo:owner/name:ref:refs/heads/main
+              #   repo:owner@<owner_id>/name@<repo_id>:ref:refs/heads/main  (o'zgarmas ID'lar bilan)
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:*'
+                token.actions.githubusercontent.com:sub:
+                  - !Sub 'repo:${GitHubRepo}:ref:refs/heads/${GitBranch}'
+                  - !Sub
+                    - 'repo:${Owner}@*/${Name}@*:ref:refs/heads/${GitBranch}'
+                    - Owner: !Select [0, !Split ['/', !Ref GitHubRepo]]
+                      Name: !Select [1, !Split ['/', !Ref GitHubRepo]]
       Policies:
         - PolicyName: instance-refresh-only
           PolicyDocument:
