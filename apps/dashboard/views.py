@@ -1,6 +1,6 @@
 import json
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Q
 from django.utils import timezone
 from django.views.generic import TemplateView
 from apps.warehouse.models import InventoryBatch, StockMovement

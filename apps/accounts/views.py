@@ -4,9 +4,9 @@ from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View, TemplateView
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, TemplateView
 from .forms import UserCreateForm, UserUpdateForm, SellerProfileForm
 from .models import SellerProfile
 

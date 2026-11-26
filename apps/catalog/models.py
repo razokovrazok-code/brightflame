@@ -93,7 +93,6 @@ class Product(models.Model):
 
     def get_available_stock(self):
         from apps.warehouse.models import InventoryBatch
-        from django.db.models import Sum, F
         batches = InventoryBatch.objects.filter(product=self, condition='available')
         total = sum(b.quantity_on_hand - b.quantity_reserved for b in batches)
         return max(0, total)
