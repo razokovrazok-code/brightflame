@@ -511,7 +511,9 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:ref:refs/heads/${GitBranch}'
+              # Faqat shu repo; branch cheklovi workflow'da (deploy faqat main push'da)
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:*'
       Policies:
         - PolicyName: instance-refresh-only
           PolicyDocument:
