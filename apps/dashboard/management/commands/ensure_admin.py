@@ -22,9 +22,18 @@ class Command(BaseCommand):
             username=username,
             defaults={'role': 'admin', 'is_staff': True, 'is_superuser': True},
         )
-        if created:
+        # Secrets Manager — yagona manba: parol farq qilsa, sinxronlanadi
+        changed = created or not user.check_password(password)
+        if changed:
             user.set_password(password)
-            user.save()
+        user.is_active = True
+        user.is_staff = True
+        user.is_superuser = True
+        user.role = 'admin'
+        user.save()
+        if created:
             self.stdout.write(self.style.SUCCESS(f"Admin '{username}' yaratildi"))
+        elif changed:
+            self.stdout.write(self.style.SUCCESS(f"Admin '{username}' paroli Secrets Manager bilan sinxronlandi"))
         else:
-            self.stdout.write(f"Admin '{username}' allaqachon mavjud — o'zgartirilmadi")
+            self.stdout.write(f"Admin '{username}' allaqachon mavjud va paroli mos")

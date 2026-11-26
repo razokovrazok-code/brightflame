@@ -52,3 +52,16 @@ class EnsureAdminCommandTests(TestCase):
         users = get_user_model().objects.filter(username='admin')
         self.assertEqual(users.count(), 1)
         self.assertTrue(users.first().is_superuser)
+
+    def test_syncs_password_from_secret(self):
+        import os
+        from django.core.management import call_command
+        get_user_model().objects.create_user(username='admin', password='old-password')
+        os.environ['DJANGO_ADMIN_PASSWORD'] = 'New-secret-value-2'
+        try:
+            call_command('ensure_admin')
+        finally:
+            del os.environ['DJANGO_ADMIN_PASSWORD']
+        admin = get_user_model().objects.get(username='admin')
+        self.assertTrue(admin.check_password('New-secret-value-2'))
+        self.assertTrue(admin.is_superuser and admin.is_staff and admin.role == 'admin')
